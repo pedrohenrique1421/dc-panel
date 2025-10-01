@@ -4,11 +4,9 @@ import threading
 import queue
 import sys
 import time
-import cv2
 from ultralytics import YOLO
 import itertools
 import pygame
-import os
 
 # === Configurações ===
 stream_url = "srt://168.90.225.116:6053?mode=caller&latency=2000&transtype=live&passphrase=yKz585@354&pbkeylen=16"
@@ -17,10 +15,6 @@ model_path = r"C:\DC panel v1.0.0\runs\detect\train\weights\best.pt"
 detect_every_n = 2
 yolo_conf = 0.5
 alarm_file = "alarm.mp3"
-output_dir = "gravacoes"
-
-# cria pasta de saída se não existir
-os.makedirs(output_dir, exist_ok=True)
 
 # === Inicializa YOLO ===
 model = YOLO(model_path)
@@ -28,7 +22,7 @@ model = YOLO(model_path)
 # === Inicializa Pygame para som ===
 pygame.mixer.init()
 pygame.mixer.music.load(alarm_file)
-pygame.mixer.music.set_volume(1.0)
+pygame.mixer.music.set_volume(1.0)  # volume máximo
 
 # === Fila de frames ===
 frame_queue = queue.Queue(maxsize=10)
@@ -38,19 +32,15 @@ process = None
 process_lock = threading.Lock()
 reconnecting = False
 
+# === Spinner para animação integrada ===
 spinner_cycle = itertools.cycle(['|', '/', '-', '\\'])
 
-# === Suavização temporal ===
-LOGO_APPEAR_THRESHOLD = 3
-LOGO_DISAPPEAR_THRESHOLD = 10
+# === Parâmetros de suavização temporal ===
+LOGO_APPEAR_THRESHOLD = 3     # precisa de 3 frames seguidos com logo
+LOGO_DISAPPEAR_THRESHOLD = 10 # precisa de 10 frames seguidos sem logo
 logo_true_count = 0
 logo_false_count = 0
 prev_logo_state = False
-
-# === Variáveis de gravação ===
-video_writer = None
-fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-fps_gravacao = 25  # taxa de gravação estimada
 
 # === Função para iniciar/reiniciar FFmpeg ===
 def start_ffmpeg():
@@ -113,14 +103,14 @@ def read_frames():
 
 threading.Thread(target=read_frames, daemon=True).start()
 
-# === Função para tocar alarme ===
+# === Função para tocar alarme com Pygame (não sobrepõe) ===
 def play_alarm():
     if not pygame.mixer.music.get_busy():
         pygame.mixer.music.play()
 
-# === Thread de detecção YOLO + gravação ===
-def detect_yolo_with_recording():
-    global logo_true_count, logo_false_count, prev_logo_state, video_writer
+# === Thread de detecção YOLO com FPS, spinner, log e suavização ===
+def detect_yolo_with_fps_and_spinner():
+    global logo_true_count, logo_false_count, prev_logo_state
 
     frame_count = 0
     fps_count = 0
@@ -145,64 +135,47 @@ def detect_yolo_with_recording():
                 fps_count = 0
                 last_fps_time = current_time
 
+            if frame_count % detect_every_n != 0:
+                continue
+
             frame = np.frombuffer(raw_frame, np.uint8).reshape((height, width, 3))
+            results = model(frame, verbose=False, conf=yolo_conf)
+            logo_detected = len(results[0].boxes) > 0
 
-            if frame_count % detect_every_n == 0:
-                results = model(frame, verbose=False, conf=yolo_conf)
-                logo_detected = len(results[0].boxes) > 0
+            # Atualiza contadores
+            if logo_detected:
+                logo_true_count += 1
+                logo_false_count = 0
+            else:
+                logo_false_count += 1
+                logo_true_count = 0
 
-                if logo_detected:
-                    logo_true_count += 1
-                    logo_false_count = 0
-                else:
-                    logo_false_count += 1
-                    logo_true_count = 0
+            # Verifica transições com thresholds
+            if logo_true_count >= LOGO_APPEAR_THRESHOLD and not prev_logo_state:
+                print(f"\n🎯 Logo apareceu! - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                prev_logo_state = True
+                threading.Thread(target=play_alarm, daemon=True).start()
 
-                # transições
-                if logo_true_count >= LOGO_APPEAR_THRESHOLD and not prev_logo_state:
-                    print(f"\n🎯 Logo apareceu! - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                    prev_logo_state = True
-                    threading.Thread(target=play_alarm, daemon=True).start()
-
-                    # inicia gravação
-                    ts = time.strftime("%Y-%m-%d_%H-%M-%S")
-                    filename = os.path.join(output_dir, f"deteccao_{ts}.mp4")
-                    video_writer = cv2.VideoWriter(filename, fourcc, fps_gravacao, (width, height))
-                    print(f"🎥 Gravando vídeo: {filename}")
-
-                elif logo_false_count >= LOGO_DISAPPEAR_THRESHOLD and prev_logo_state:
-                    print(f"\n❌ Logo desapareceu! - {time.strftime('%Y-%m-%d %H:%M:%S')}")
-                    prev_logo_state = False
-
-                    # finaliza gravação
-                    if video_writer:
-                        video_writer.release()
-                        video_writer = None
-                        print("💾 Vídeo salvo!")
-
-            # grava frame se logo está presente
-            if prev_logo_state and video_writer:
-                video_writer.write(frame)
+            elif logo_false_count >= LOGO_DISAPPEAR_THRESHOLD and prev_logo_state:
+                print(f"\n❌ Logo desapareceu! - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                prev_logo_state = False
 
             spinner = next(spinner_cycle)
             sys.stdout.write(f"\r{spinner} FPS: {fps:5.1f} | Logo: {'V' if prev_logo_state else 'F'}   ")
             sys.stdout.flush()
-
         except Exception as e:
             print(f"\n⚠️ Erro na detecção: {e}")
             time.sleep(0.5)
 
-threading.Thread(target=detect_yolo_with_recording, daemon=True).start()
+threading.Thread(target=detect_yolo_with_fps_and_spinner, daemon=True).start()
 
-# === Mantém vivo ===
+# === Loop principal apenas para manter o script vivo ===
 try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
     print("\n🛑 Interrompido pelo usuário")
 finally:
-    if video_writer:
-        video_writer.release()
     with process_lock:
         if process:
             process.terminate()
