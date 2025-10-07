@@ -25,7 +25,7 @@ pygame.mixer.music.load(alarm_file)
 pygame.mixer.music.set_volume(1.0)  # volume máximo
 
 # === Fila de frames ===
-frame_queue = queue.Queue(maxsize=10)
+frame_queue = queue.Queue(maxsize=15)
 
 # === Variáveis globais ===
 process = None
@@ -33,11 +33,11 @@ process_lock = threading.Lock()
 reconnecting = False
 
 # === Spinner para animação integrada ===
-spinner_cycle = itertools.cycle(['|', '/', '-', '\\'])
+spinner_cycle = itertools.cycle(['#', '+'])
 
 # === Parâmetros de suavização temporal ===
-LOGO_APPEAR_THRESHOLD = 3     # precisa de 3 frames seguidos com logo
-LOGO_DISAPPEAR_THRESHOLD = 10 # precisa de 10 frames seguidos sem logo
+LOGO_APPEAR_THRESHOLD = 1     # precisa de 3 frames seguidos com logo
+LOGO_DISAPPEAR_THRESHOLD = 5 # precisa de 10 frames seguidos sem logo
 logo_true_count = 0
 logo_false_count = 0
 prev_logo_state = False
