@@ -1,0 +1,7 @@
+# Ignorar a pasta de dataset
+
+dataset/
+
+ocorrencias_novas/
+
+frames_sem_logo/
