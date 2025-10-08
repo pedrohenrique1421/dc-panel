@@ -5,7 +5,7 @@ import time
 import psutil
 import cv2
 from ultralytics import YOLO
-from utils import safe_log, spinner
+from utils import safe_log
 from audio import play_alarm, play_standby, play_standon
 from config import *
 from colorama import Style, Fore, Back # type: ignore
@@ -15,8 +15,8 @@ def detect_yolo(model, frame_queue):
     logo_false_count = 0
     prev_logo_state = False
     saving_frames = False
-    detect_every_n = 2
-    base_detect_every_n = 2
+    detect_every_n = 1
+    base_detect_every_n = 1
 
     last_standby_time = 0
     standby_alerted = False
@@ -28,7 +28,7 @@ def detect_yolo(model, frame_queue):
 
     while True:
         try:
-            cpu_load = psutil.cpu_percent(interval=1)
+            cpu_load = psutil.cpu_percent(interval=0.1)
             if cpu_load > 90:
                 time.sleep(0.1)
                 continue
@@ -56,8 +56,12 @@ def detect_yolo(model, frame_queue):
                 fps_count = 0
                 last_fps_time = time.time()
 
-                if cpu_load > 90:
+                if cpu_load > 95:
                     detect_every_n = 5
+                elif cpu_load > 80:
+                    detect_every_n = 3
+                elif cpu_load > 75:
+                    detect_every_n = 2
                 else:
                     detect_every_n = base_detect_every_n
 
@@ -91,7 +95,7 @@ def detect_yolo(model, frame_queue):
             #     cv2.imwrite(filename, frame)
             #     print(f"\r🖼️ Frame salvo: {filename}")
 
-            sys.stdout.write(f"\r{spinner()} {Fore.LIGHTYELLOW_EX}FPS: {fps:5.1f}{Style.RESET_ALL} | {Fore.LIGHTCYAN_EX}CPU: {cpu_load:5.1f}%{Style.RESET_ALL} | {Fore.LIGHTWHITE_EX}Logo: {'On' if prev_logo_state else 'Off'}   ")
+            sys.stdout.write(f"\r{Fore.LIGHTYELLOW_EX}FPS: {fps:5.1f}{Style.RESET_ALL} | {Fore.LIGHTCYAN_EX}CPU: {cpu_load:5.1f}%{Style.RESET_ALL} | {Fore.LIGHTWHITE_EX}Logo: {'On' if prev_logo_state else 'Off'}   ")
             sys.stdout.flush()
 
         except Exception as e:
