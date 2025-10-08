@@ -75,10 +75,10 @@ def detect_yolo(model, frame_queue):
                 prev_logo_state = False
                 saving_frames = True
 
-            if saving_frames and not prev_logo_state and frame_count % 10 == 0:
-                filename = os.path.join(SAVE_FOLDER, f"frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.jpg")
-                cv2.imwrite(filename, frame)
-                print(f"\r🖼️ Frame salvo: {filename}")
+            # if saving_frames and not prev_logo_state and frame_count % 10 == 0:
+            #     filename = os.path.join(SAVE_FOLDER, f"frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.jpg")
+            #     cv2.imwrite(filename, frame)
+            #     print(f"\r🖼️ Frame salvo: {filename}")
 
             sys.stdout.write(f"\r{spinner()} FPS: {fps:5.1f} | CPU: {cpu_load:5.1f}% | Logo: {'V' if prev_logo_state else 'F'}   ")
             sys.stdout.flush()
