@@ -2,6 +2,7 @@ import numpy as np
 import threading
 import sys
 import time
+import queue
 import psutil
 import cv2
 from ultralytics import YOLO
@@ -10,11 +11,18 @@ from audio import play_alarm, play_standby, play_standon
 from config import *
 from colorama import Style, Fore, Back # type: ignore
 
-def detect_yolo(model, frame_queue):
+def detect_yolo_thread(frame_queue, thread_id, status_dict, status_lock):
+    """Cada thread YOLO cria seu próprio modelo"""
+    model = YOLO(MODEL_PATH)
+    detect_yolo(model, frame_queue, status_dict, status_lock, thread_id)
+
+def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
+
+    # Variáveis
     logo_true_count = 0
     logo_false_count = 0
     prev_logo_state = False
-    saving_frames = False
+    saved = False
     detect_every_n = 1
     base_detect_every_n = 1
 
@@ -22,55 +30,58 @@ def detect_yolo(model, frame_queue):
     standby_alerted = False
 
     frame_count = 0
-    fps_count = 0
     last_fps_time = time.time()
-    fps = 0
+    last_log_time = 0
 
+    # Loop principal
     while True:
         try:
-            cpu_load = psutil.cpu_percent(interval=0.1)
+            t0 = time.time()
+
+            cpu_load = psutil.cpu_percent(interval=0.05)
             if cpu_load > 90:
                 time.sleep(0.1)
                 continue
 
             try:
+                # --- tempo de leitura da fila ---
                 raw_frame = frame_queue.get(timeout=0.3)
+                t1 = time.time()
                 if standby_alerted:
                     play_standon()
-                    print(f"\n🟢 {Fore.LIGHTWHITE_EX}Thread{Fore.RESET} On-line")
+                    print(f"🟢 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} On-line\n")
                 standby_alerted = False
                 last_standby_time = time.time()
             except:
                 if not standby_alerted and time.time() - last_standby_time > 3:
                     standby_alerted = True
                     play_standby()
-                    print(f"\n🔴 {Fore.LIGHTWHITE_EX}Thread{Fore.RESET} em standby")
+                    print(f"🔴 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} em standby\n")
                 continue
 
-            frame_count += 1
-            fps_count += 1
-
+            # Limitador de uso
             elapsed = time.time() - last_fps_time
             if elapsed >= 1.0:
-                fps = fps_count / elapsed
-                fps_count = 0
-                last_fps_time = time.time()
-
                 if cpu_load > 95:
-                    detect_every_n = 5
-                elif cpu_load > 80:
-                    detect_every_n = 3
-                elif cpu_load > 75:
-                    detect_every_n = 2
+                    detect_every_n = 8
                 else:
                     detect_every_n = base_detect_every_n
 
             if frame_count % detect_every_n != 0:
                 continue
 
+            # Inferência da YOLO
             frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
+
             results = model(frame, verbose=False, conf=YOLO_CONF)
+            t2 = time.time()
             logo_detected = len(results[0].boxes) > 0
+
+            # Calculo de desempenho em ms
+            read_time = t1 - t0
+            infer_time = t2 - t1
+            total_time = t2 - t0
+            fps_real = 1.0 / total_time if total_time > 0 else 0
 
             if logo_detected:
                 logo_true_count += 1
@@ -80,24 +91,30 @@ def detect_yolo(model, frame_queue):
                 logo_true_count = 0
 
             if logo_true_count >= LOGO_APPEAR_THRESHOLD and not prev_logo_state:
-                print(f"\n🎯 {Back.GREEN}{Fore.LIGHTWHITE_EX} Logo apareceu! {Style.RESET_ALL} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 prev_logo_state = True
-                saving_frames = False
+                saved = False
                 threading.Thread(target=play_alarm, daemon=True).start()
 
             elif logo_false_count >= LOGO_DISAPPEAR_THRESHOLD and prev_logo_state:
-                print(f"\n❌ {Back.LIGHTRED_EX}{Fore.LIGHTWHITE_EX} Logo desapareceu! {Back.RESET} - {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 prev_logo_state = False
-                saving_frames = True
 
-            # if saving_frames and not prev_logo_state and frame_count % 10 == 0:
+            # Salvar frames positivos
+            # if not saved and prev_logo_state:
             #     filename = os.path.join(SAVE_FOLDER, f"frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.jpg")
             #     cv2.imwrite(filename, frame)
             #     print(f"\r🖼️ Frame salvo: {filename}")
+            #     saved = True
 
-            sys.stdout.write(f"\r{Fore.LIGHTYELLOW_EX}FPS: {fps:5.1f}{Style.RESET_ALL} | {Fore.LIGHTCYAN_EX}CPU: {cpu_load:5.1f}%{Style.RESET_ALL} | {Fore.LIGHTWHITE_EX}Logo: {'On' if prev_logo_state else 'Off'}   ")
-            sys.stdout.flush()
+            # Imprimindo dados
+            # === Atualiza status global ===
+            with status_lock:
+                status_dict[thread_id] = {
+                    "fps": fps_real,
+                    "cpu": cpu_load,
+                    "yolo_time": infer_time,
+                    "logo": prev_logo_state
+                }
 
         except Exception as e:
-            safe_log(f"{Back.RED}{Fore.LIGHTWHITE_EX} Erro na detecção YOLO ", e)
+            safe_log(f"{Back.RED}{Fore.LIGHTWHITE_EX} Erro na detecção (Thread #{Fore.LIGHTBLACK_EX}{thread_id})", e)
             time.sleep(0.5)
