@@ -4,6 +4,7 @@ import queue
 import time
 from utils import safe_log
 from config import STREAM_URL, WIDTH, HEIGHT
+from colorama import Back, Fore, Style # type: ignore
 
 process = None
 process_lock = threading.Lock()
@@ -31,29 +32,44 @@ def start_ffmpeg():
                 stderr=subprocess.DEVNULL,
                 bufsize=10**8
             )
-            print("\n🔄 FFmpeg iniciado")
+            print(f"\n🔄 {Fore.LIGHTWHITE_EX}FFmpeg {Back.GREEN} iniciado ")
         except Exception as e:
             safe_log("Falha ao iniciar FFmpeg", e)
             process = None
             time.sleep(2)
 
 def read_frames():
-    global process
+    global process, reconnecting
     frame_size = WIDTH * HEIGHT * 3
+    last_frame_time = time.time()
 
     while True:
         try:
             if not process:
                 start_ffmpeg()
+
             raw_frame = process.stdout.read(frame_size)
             if len(raw_frame) != frame_size:
                 raise RuntimeError("Frame incompleto")
+
+            last_frame_time = time.time()  # frame recebido, reset watchdog
+
             if frame_queue.full():
                 frame_queue.get_nowait()
             frame_queue.put_nowait(raw_frame)
+
+            # watchdog: se não receber frame por mais de 3s, reinicia FFmpeg
+            if time.time() - last_frame_time > 3:
+                raise TimeoutError("FFmpeg travado — reiniciando...")
+
         except Exception as e:
             safe_log("Erro na leitura do stream", e)
-            if process:
-                process.kill()
-                process = None
-            time.sleep(2)
+            with process_lock:
+                if process:
+                    try:
+                        process.kill()
+                    except:
+                        pass
+                    process = None
+            reconnecting = True
+            time.sleep(2)  # dá tempo de reiniciar
