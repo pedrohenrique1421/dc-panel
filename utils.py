@@ -2,7 +2,7 @@ import itertools
 import traceback
 from colorama import Fore, Back # type: ignore
 
-spinner_cycle = itertools.cycle(['(0 - 0)', '(= - =)'])
+spinner_cycle = itertools.cycle(['◻', '◼'])
 
 def spinner():
     return next(spinner_cycle)
