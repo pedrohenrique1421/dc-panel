@@ -5,3 +5,5 @@ dataset/
 ocorrencias_novas/
 
 frames_sem_logo/
+
+__pycache__/*

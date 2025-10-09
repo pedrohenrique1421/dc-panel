@@ -39,7 +39,7 @@ threading.Thread(
 ).start() # Monitor
 
 # Threads YOLO
-NUM_THREADS = 2  # Numero de Threads
+NUM_THREADS = 3  # Numero de Threads
 for i in range(NUM_THREADS):
     t = threading.Thread(
         target=detect_yolo_thread,

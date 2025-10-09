@@ -23,24 +23,21 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
     logo_false_count = 0
     prev_logo_state = False
     saved = False
-    detect_every_n = 1
-    base_detect_every_n = 1
 
     last_standby_time = 0
     standby_alerted = False
 
     frame_count = 0
     last_fps_time = time.time()
-    last_log_time = 0
 
     # Loop principal
     while True:
         try:
             t0 = time.time()
 
-            cpu_load = psutil.cpu_percent(interval=0.05)
+            cpu_load = psutil.cpu_percent(interval=0.025)
             if cpu_load > 90:
-                time.sleep(0.1)
+                time.sleep(0.025)
                 continue
 
             try:
@@ -61,14 +58,6 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
 
             # Limitador de uso
             elapsed = time.time() - last_fps_time
-            if elapsed >= 1.0:
-                if cpu_load > 95:
-                    detect_every_n = 8
-                else:
-                    detect_every_n = base_detect_every_n
-
-            if frame_count % detect_every_n != 0:
-                continue
 
             # Inferência da YOLO
             frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
