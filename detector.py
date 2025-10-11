@@ -27,7 +27,7 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
     last_standby_time = 0
     standby_alerted = False
 
-    frame_count = 0
+    cpu_load_time = 0.043
     last_fps_time = time.time()
 
     # Loop principal
@@ -37,7 +37,7 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
 
             cpu_load = psutil.cpu_percent(interval=0.025)
             if cpu_load > 90:
-                time.sleep(0.025)
+                time.sleep(cpu_load_time)
                 continue
 
             try:
@@ -101,7 +101,8 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                     "fps": fps_real,
                     "cpu": cpu_load,
                     "yolo_time": infer_time,
-                    "logo": prev_logo_state
+                    "logo": prev_logo_state,
+                    "cpu_load_time": cpu_load_time # Variavel DEV
                 }
 
         except Exception as e:

@@ -9,6 +9,8 @@ ALARM_FILE, STANDBY_FILE, STANDON_FILE = "sounds/alarm.mp3", "sounds/standby.mp3
 SAVE_FOLDER = "frames_sem_logo" # Pasta para salvar frames selecionados
 VOLUME = 60 # Volume das notificações
 
+FILENAME = "data.json"
+
 os.makedirs(SAVE_FOLDER, exist_ok=True) # Garante que a pasta existe
 
 LOGO_APPEAR_THRESHOLD = 3 # Quantidade de frames para confirmar que a logo apareceu
