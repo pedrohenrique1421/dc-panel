@@ -8,10 +8,8 @@ from audio import init_audio
 from config import ALARM_FILE, MODEL_PATH, STANDBY_FILE, STANDON_FILE
 from monitor import monitor_status
 from colorama import init, Back, Fore, Style # type: ignore
+from status_manager import *
 
-# === Status global das threads ===
-status_dict = {}
-status_lock = threading.Lock()
 
 # Inicializa o som e o modelo
 init_audio(ALARM_FILE, STANDBY_FILE, STANDON_FILE)

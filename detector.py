@@ -1,15 +1,14 @@
 import numpy as np
 import threading
-import sys
 import time
-import queue
 import psutil
-import cv2
 from ultralytics import YOLO
+from recorder import buffer_frame, start_recording, recording_active
 from utils import safe_log
 from audio import play_alarm, play_standby, play_standon
 from config import *
-from colorama import Style, Fore, Back # type: ignore
+from colorama import Fore, Back # type: ignore
+
 
 def detect_yolo_thread(frame_queue, thread_id, status_dict, status_lock):
     """Cada thread YOLO cria seu próprio modelo"""
@@ -18,15 +17,23 @@ def detect_yolo_thread(frame_queue, thread_id, status_dict, status_lock):
 
 def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
 
-    # Variáveis
+    # Variáveis de BUFFER
     logo_true_count = 0
     logo_false_count = 0
-    prev_logo_state = False
-    saved = False
 
+    # Variaveis de GRAVAÇÃO
+
+    frames_during = []
+    detection_active = False
+
+    # Variaveis de APPER
+    prev_logo_state = False
+
+    # Variáveis de ALERT
     last_standby_time = 0
     standby_alerted = False
 
+    # Variáveis de DESEMPENHO
     cpu_load_time = 0.043
     last_fps_time = time.time()
 
@@ -41,7 +48,7 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                 continue
 
             try:
-                # --- tempo de leitura da fila ---
+                # === Tempo de leitura da fila ===
                 raw_frame = frame_queue.get(timeout=0.3)
                 t1 = time.time()
                 if standby_alerted:
@@ -61,10 +68,13 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
 
             # Inferência da YOLO
             frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
+            FRAME_BUFFER.append(frame.copy())
+
+            buffer_frame(frame)
 
             results = model(frame, verbose=False, conf=YOLO_CONF)
             t2 = time.time()
-            logo_detected = len(results[0].boxes) > 0
+            logo_detected = any(r.boxes for r in results)
 
             # Calculo de desempenho em ms
             read_time = t1 - t0
@@ -80,19 +90,19 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                 logo_true_count = 0
 
             if logo_true_count >= LOGO_APPEAR_THRESHOLD and not prev_logo_state:
-                prev_logo_state = True
-                saved = False
-                threading.Thread(target=play_alarm, daemon=True).start()
+                if not detection_active:
+                    print(f"{Fore.GREEN}🎯 Logo detectada — iniciando corte...")
+                    detection_active = True
+                    last_detect_time = time.time()
+                    prev_logo_state = True
+                frames_during.append(frame)
 
             elif logo_false_count >= LOGO_DISAPPEAR_THRESHOLD and prev_logo_state:
+                print(f"{Fore.YELLOW}📤 Logo sumiu — finalizando gravação...")
+                start_recording(frames_during)
+                frames_during = []
+                detection_active = False
                 prev_logo_state = False
-
-            # Salvar frames positivos
-            # if not saved and prev_logo_state:
-            #     filename = os.path.join(SAVE_FOLDER, f"frame_{time.strftime('%Y-%m-%d_%H-%M-%S')}.jpg")
-            #     cv2.imwrite(filename, frame)
-            #     print(f"\r🖼️ Frame salvo: {filename}")
-            #     saved = True
 
             # Imprimindo dados
             # === Atualiza status global ===

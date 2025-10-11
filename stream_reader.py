@@ -4,7 +4,7 @@ import queue
 import time
 from utils import safe_log
 from config import STREAM_URL, WIDTH, HEIGHT
-from colorama import Back, Fore, Style # type: ignore
+from colorama import Back, Fore # type: ignore
 
 # Melhorar a velocidade de LEITURA
 
