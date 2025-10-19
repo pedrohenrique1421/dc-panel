@@ -1,12 +1,12 @@
 import numpy as np
-import threading
 import time
 import psutil
 from ultralytics import YOLO
-from recorder import buffer_frame, start_recording, recording_active
-from utils import safe_log
-from audio import play_alarm, play_standby, play_standon
+#from recorder import buffer_frame, start_recording, recording_active
+from utils import *
+from audio import play_standby, play_standon
 from config import *
+from main import a
 from colorama import Fore, Back # type: ignore
 
 
@@ -23,11 +23,10 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
 
     # Variaveis de GRAVAÇÃO
 
-    frames_during = []
-    detection_active = False
-
-    # Variaveis de APPER
-    prev_logo_state = False
+    logo_start = None
+    logo_end = None
+    logo_active = False
+    event_log = []
 
     # Variáveis de ALERT
     last_standby_time = 0
@@ -53,14 +52,14 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                 t1 = time.time()
                 if standby_alerted:
                     play_standon()
-                    print(f"🟢 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} On-line\n")
+                    print(f"\n🟢 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} On-line")
                 standby_alerted = False
                 last_standby_time = time.time()
             except:
                 if not standby_alerted and time.time() - last_standby_time > 3:
                     standby_alerted = True
                     play_standby()
-                    print(f"🔴 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} em standby\n")
+                    print(f"\n🔴 {Fore.LIGHTWHITE_EX}Thread #{thread_id}{Fore.RESET} em standby")
                 continue
 
             # Limitador de uso
@@ -69,8 +68,6 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
             # Inferência da YOLO
             frame = np.frombuffer(raw_frame, np.uint8).reshape((HEIGHT, WIDTH, 3))
             FRAME_BUFFER.append(frame.copy())
-
-            buffer_frame(frame)
 
             results = model(frame, verbose=False, conf=YOLO_CONF)
             t2 = time.time()
@@ -89,20 +86,22 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                 logo_false_count += 1
                 logo_true_count = 0
 
-            if logo_true_count >= LOGO_APPEAR_THRESHOLD and not prev_logo_state:
-                if not detection_active:
-                    print(f"{Fore.GREEN}🎯 Logo detectada — iniciando corte...")
-                    detection_active = True
-                    last_detect_time = time.time()
-                    prev_logo_state = True
-                frames_during.append(frame)
+            # --- NOVA LÓGICA DE COMUNICAÇÃO COM A THREAD DE GRAVAÇÃO ---
 
-            elif logo_false_count >= LOGO_DISAPPEAR_THRESHOLD and prev_logo_state:
-                print(f"{Fore.YELLOW}📤 Logo sumiu — finalizando gravação...")
-                start_recording(frames_during)
-                frames_during = []
-                detection_active = False
-                prev_logo_state = False
+            if logo_detected and not logo_active:
+                logo_start = time.time()
+                logo_active = True
+
+            # Quando a logo some
+            elif not logo_detected and logo_active:
+                logo_end = time.time()
+                logo_active = False
+                event_log.append((logo_start, logo_end))
+                print(f"🎬 Evento registrado: {logo_start:.2f}s -> {logo_end:.2f}s")
+                if not a or not os.path.exists(a):
+                    print(f"⚠️ Arquivo principal ainda não existe: {a}")
+                else:
+                    cortar_video(a, logo_start, logo_end, SAVE_FOLDER)
 
             # Imprimindo dados
             # === Atualiza status global ===
@@ -111,8 +110,8 @@ def detect_yolo(model, frame_queue, status_dict, status_lock, thread_id=1):
                     "fps": fps_real,
                     "cpu": cpu_load,
                     "yolo_time": infer_time,
-                    "logo": prev_logo_state,
-                    "cpu_load_time": cpu_load_time # Variavel DEV
+                    "logo": logo_active,
+                    "datetime": {time.time()} # Variavel DEV
                 }
 
         except Exception as e:

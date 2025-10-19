@@ -12,14 +12,14 @@ def monitor_status(status_dict, status_lock):
                 time.sleep(0.5)
                 continue
 
-            # Somar e calcular médias
+            # Definindo variáveis para armazenamento
             total_fps = sum(st['fps'] for st in status_dict.values())
             avg_cpu = sum(st['cpu'] for st in status_dict.values()) / len(status_dict)
             avg_yolo = sum(st['yolo_time'] for st in status_dict.values()) / len(status_dict)
-            logo_on = any(st['logo'] for st in status_dict.values())  # se alguma thread detectar logo
-            cpu_load_time = max(st['cpu_load_time'] for st in status_dict.values())
+            logo_on = any(st['logo'] for st in status_dict.values())  # Variavel que será mudada futuramente para o tipo de ocorrencia
+            datetime = min(st['datetime'] for st in status_dict.values())
 
-            combined = (
+            combined = ( # String para ser exibida no terminal, apenas dev
                 f"🧠 Threads: {len(status_dict)} | "
                 f"{Fore.LIGHTYELLOW_EX}FPS:{Style.RESET_ALL} {total_fps:5.1f} | "
                 f"{Fore.LIGHTCYAN_EX}CPU:{Style.RESET_ALL} {avg_cpu:5.1f}% | "
@@ -32,12 +32,11 @@ def monitor_status(status_dict, status_lock):
             "avg_cpu": f"{avg_cpu:5.1f}",
             "avg_yolo": f"{avg_yolo*1000:6.1f}",
             "logo_on": logo_on,
-            "date_time": f"{datetime.now()}",
-            "cpu_load_time": cpu_load_time
+            "datetime": datetime
         }
 
-        save_data(data, FILENAME)
+        save_data(data, FILENAME) # Função apenas dev
 
-        sys.stdout.write("\r" + combined)
+        sys.stdout.write("\r" + combined) # Exibindo no terminal
         sys.stdout.flush()
         time.sleep(0.5)

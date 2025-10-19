@@ -1,52 +1,24 @@
-import cv2
-import os
+import subprocess
 import time
-import threading
-from collections import deque
-from config import SAVE_FOLDER, WIDTH, HEIGHT
+from config import STREAM_URL, SAVE_FOLDER
 
-# Variáveis globais de controle
-record_lock = threading.Lock()
-recording_active = False
-frame_buffer = deque(maxlen=60)  # 2s de buffer (~30fps)
+MAIN_RECORD = None  # caminho do arquivo principal
 
-def buffer_frame(frame):
-    """Mantém buffer dos últimos 2s."""
-    frame_buffer.append(frame.copy())
+def start_recording():
+    global MAIN_RECORD
 
-def _save_video(frames_after, fps=30):
-    """Thread real de gravação."""
-    global recording_active
-    with record_lock:
-        if recording_active:
-            return
-        recording_active = True
+    timestamp = time.strftime("%d%m%Y_%H%M%S")
+    output_path = f"{SAVE_FOLDER}/full_{timestamp}.ts"
+    MAIN_RECORD = output_path
 
-    try:
-        os.makedirs(SAVE_FOLDER, exist_ok=True)
-        filename = os.path.join(SAVE_FOLDER, f"det_{time.strftime('%H%M%S')}.mp4")
-        out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*"mp4v"), fps, (WIDTH, HEIGHT))
-
-        # 2s antes
-        for f in list(frame_buffer):
-            out.write(f)
-
-        # durante
-        for f in frames_after:
-            out.write(f)
-
-        # 2s depois
-        time.sleep(2)
-        for f in list(frame_buffer):
-            out.write(f)
-
-        out.release()
-        print(f"💾 Corte salvo: {filename}")
-
-    finally:
-        recording_active = False
-
-def start_recording(frames_during):
-    """Inicia gravação em thread separada."""
-    if not recording_active:
-        threading.Thread(target=_save_video, args=(frames_during,), daemon=True).start()
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-y",  # sobrescreve arquivo se existir
+        "-i", STREAM_URL,
+        "-c", "copy",  # não recodifica, grava direto
+        "-f", "mpegts",  # formato que pode ser cortado enquanto grava
+        output_path
+    ]
+    process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print(f"🎥 Gravando stream em: {output_path}")
+    return process, output_path

@@ -53,7 +53,7 @@ def read_frames():
             # tenta ler o frame com timeout de 1 segundo
             start_time = time.time()
             raw_frame = process.stdout.read(frame_size)
-            if time.time() - start_time > 5:
+            if time.time() - start_time > 8:
                 raise TimeoutError("FFmpeg travado — reiniciando...")
 
             if len(raw_frame) != frame_size:
