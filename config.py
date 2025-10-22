@@ -6,8 +6,8 @@ import time
 # === Configurações ===
 STREAM_URL = "srt://168.90.225.116:6053?mode=caller&latency=2000&transtype=live&passphrase=yKz585@354&pbkeylen=16"
 WIDTH, HEIGHT = 640, 360 # Tamanho dos frames
-MODEL_PATH = r"C:\DC panel v1.0.0\runs\detect\train\weights\best.pt" # caminho do modelo da I.A.
-YOLO_CONF = 0.65 # Valor de Confiança da I.A.
+MODEL_PATH = r"C:\DC panel v1.0.0\weights\best.pt" # caminho do modelo da I.A.
+YOLO_CONF = 0.70 # Valor de Confiança da I.A.
 ALARM_FILE, STANDBY_FILE, STANDON_FILE = "sounds/alarm.mp3", "sounds/standby.mp3", "sounds/standon.mp3"
 SAVE_FOLDER = f"cortes/{time.strftime('%d%m%Y')}" # Pasta para salvar frames selecionados
 VOLUME = 60 # Volume das notificações
